@@ -1,0 +1,7 @@
+# Ignore everything
+*
+
+# EXCEPT the following (must be prepended with '!' to NOT be ignored)
+!src/
+!Cargo.toml
+!Cross.toml

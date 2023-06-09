@@ -1,0 +1,48 @@
+[package]
+
+name = "echo-rs"
+version = "0.1.0"
+edition = "2021"
+authors = ["Mark S. <the@wondersmith.dev>"]
+license = "AGPL-3.0-or-later"
+
+
+description = """
+A simple HTTP echo server
+"""
+
+
+[profile.dev]
+debug = 2
+opt-level = 0
+incremental = true
+codegen-units = 512
+
+
+[profile.release]
+lto = true  # Enable Link Time Optimization to remove dead code reduce binary size
+debug = 0
+strip = true  # Automatically strip symbols from the binary.
+opt-level = "z"  # Optimize for size.
+panic = "abort"  # Don't include the rustc's unwinding code in release builds
+codegen-units = 1  # Allow for maximum size reduction optimizations
+incremental = true
+
+
+[dependencies]
+
+log = "^0.4"
+anyhow = "^1"
+futures = "*"
+itertools = "*"
+tracing = "^0.1"
+metrics = "^0.21"
+serde_json = "^1"
+lazy_static = "^1"
+pretty_env_logger = "^0.5"
+metrics-exporter-prometheus = "^0.12"
+tokio = { version = "^1.25", features = ["full"] }
+tracing-subscriber = { version = "^0.3", features = ["env-filter"] }
+clap = { version = "^4.3", features = ["env", "derive", "default"] }
+axum = { version = "^0.6", features = ["http2", "macros", "headers", "tracing"] }
+serde = { version = "^1", features = ["rc", "std", "alloc", "derive", "serde_derive"]}
