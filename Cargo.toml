@@ -2,14 +2,19 @@
 
 name = "echo-rs"
 version = "0.1.0"
+description = "A simple HTTP echo server"
+license = "AGPL-3.0-or-later"
 edition = "2021"
 authors = ["Mark S. <the@wondersmith.dev>"]
-license = "AGPL-3.0-or-later"
 
+readme = "README.md"
+homepage = "https://github.com/the-wondersmith/echo-rs"
+repository = "https://github.com/the-wondersmith/echo-rs"
+# documentation = "https://docs.rs/echo-rs/latest/echo_rs/"
 
-description = """
-A simple HTTP echo server
-"""
+keywords = ["kubernetes", "demo", "axum", "echo"]
+categories = ["web-programming::http-server", "development-tools::testing"]
+
 
 
 [profile.dev]
@@ -33,16 +38,12 @@ incremental = true
 
 log = "^0.4"
 anyhow = "^1"
-futures = "*"
-itertools = "*"
 tracing = "^0.1"
 metrics = "^0.21"
 serde_json = "^1"
-lazy_static = "^1"
-pretty_env_logger = "^0.5"
 metrics-exporter-prometheus = "^0.12"
+serde = { version = "^1", features = ["derive"]}
 tokio = { version = "^1.25", features = ["full"] }
 tracing-subscriber = { version = "^0.3", features = ["env-filter"] }
 clap = { version = "^4.3", features = ["env", "derive", "default"] }
 axum = { version = "^0.6", features = ["http2", "macros", "headers", "tracing"] }
-serde = { version = "^1", features = ["rc", "std", "alloc", "derive", "serde_derive"]}
