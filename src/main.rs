@@ -9,15 +9,16 @@ use std::{collections::HashMap, env, fmt::Debug, net::SocketAddr};
 // Third Party Imports
 use axum::{
     body::Bytes,
-    extract::{Json, Path, Query},
+    extract::{ConnectInfo, Json, Path, Query},
     http::{HeaderMap, Method},
     middleware, routing, Router,
 };
 
 pub(crate) mod metrics;
 
-#[derive(Debug, serde::Serialize, Clone)]
+#[derive(Clone, Debug, serde::Serialize)]
 struct Echo {
+    client: String,
     method: String,
     path: String,
     headers: HashMap<String, String>,
@@ -28,6 +29,8 @@ struct Echo {
 #[derive(Debug, clap::Parser)]
 #[command(author, version, about)]
 struct Args {
+    #[arg(short = 'h', long = "host", env = "ECHO_HOST", default_value = "[::]")]
+    pub host: String,
     #[arg(short = 'p', long = "port", env = "ECHO_PORT", default_value_t = 8080)]
     pub port: usize,
     #[arg(
@@ -52,8 +55,9 @@ struct Args {
     pub log_level: tracing::Level,
 }
 
-#[tracing::instrument]
+#[tracing::instrument(ret, skip_all, parent = None)]
 async fn serialize_request(
+    ConnectInfo(client): ConnectInfo<SocketAddr>,
     method: Method,
     path: Option<Path<String>>,
     Query(params): Query<HashMap<String, String>>,
@@ -90,11 +94,10 @@ async fn serialize_request(
         })
     };
 
-    let method = method.to_string();
-
-    tracing::info!("{} {}", &method, &path);
+    let (client, method) = (client.to_string(), method.to_string());
 
     Json(Echo {
+        client,
         method,
         path,
         headers,
@@ -130,26 +133,26 @@ async fn echo_router() -> anyhow::Result<Router> {
         .route_layer(middleware::from_fn(metrics::track_metrics)))
 }
 
-#[tracing::instrument]
-async fn serve_app(port: usize) -> anyhow::Result<()> {
+#[tracing::instrument(skip_all)]
+async fn serve_app(host: &str, port: usize) -> anyhow::Result<()> {
     let app = echo_router().await?;
 
-    let addr: SocketAddr = format!("[::]:{port}").parse()?;
+    let addr: SocketAddr = format!("{host}:{port}").parse()?;
 
     tracing::info!("`echo-rs` server listening at: http://{addr}");
 
     axum::Server::bind(&addr)
-        .serve(app.into_make_service())
+        .serve(app.into_make_service_with_connect_info::<SocketAddr>())
         .await?;
 
     Ok(())
 }
 
-#[tracing::instrument]
-async fn serve_metrics(port: usize) -> anyhow::Result<()> {
+#[tracing::instrument(skip_all)]
+async fn serve_metrics(host: &str, port: usize) -> anyhow::Result<()> {
     let app = metrics::router();
 
-    let addr: SocketAddr = format!("[::]:{port}").parse()?;
+    let addr: SocketAddr = format!("{host}:{port}").parse()?;
 
     tracing::info!("Serving Prometheus metrics at: http://{addr}");
 
@@ -161,8 +164,8 @@ async fn serve_metrics(port: usize) -> anyhow::Result<()> {
     Ok(())
 }
 
-#[tokio::main]
 #[tracing::instrument]
+#[tokio::main]
 async fn main() -> anyhow::Result<()> {
     let args = <Args as clap::Parser>::parse();
 
@@ -188,10 +191,12 @@ async fn main() -> anyhow::Result<()> {
     tracing::subscriber::set_global_default(subscriber).expect("setting default subscriber failed");
 
     if !args.metrics {
-        serve_app(args.port).await
+        serve_app(&args.host, args.port).await
     } else {
-        let (echo_server, metrics_server) =
-            tokio::join!(serve_app(args.port), serve_metrics(args.metrics_port));
+        let (echo_server, metrics_server) = tokio::join!(
+            serve_app(&args.host, args.port),
+            serve_metrics(&args.host, args.metrics_port)
+        );
         let (_, _) = (echo_server?, metrics_server?);
 
         Ok(())

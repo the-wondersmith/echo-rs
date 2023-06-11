@@ -9,6 +9,7 @@ use axum::{
 };
 use metrics_exporter_prometheus::{Matcher, PrometheusBuilder, PrometheusHandle};
 
+#[tracing::instrument]
 pub(crate) fn router() -> Router {
     let recorder_handle = setup_metrics_recorder();
     Router::new().route(
@@ -17,6 +18,7 @@ pub(crate) fn router() -> Router {
     )
 }
 
+#[tracing::instrument]
 pub(crate) fn setup_metrics_recorder() -> PrometheusHandle {
     const EXPONENTIAL_SECONDS: &[f64] = &[
         0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1.0, 2.5, 5.0, 10.0,
@@ -32,6 +34,8 @@ pub(crate) fn setup_metrics_recorder() -> PrometheusHandle {
         .unwrap()
 }
 
+#[tracing::instrument(skip_all)]
+#[allow(clippy::let_with_type_underscore)]
 pub(crate) async fn track_metrics<B>(req: Request<B>, next: Next<B>) -> impl IntoResponse {
     let start = Instant::now();
     let path = if let Some(matched_path) = req.extensions().get::<MatchedPath>() {

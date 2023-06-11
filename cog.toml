@@ -1,11 +1,11 @@
 # [Cocogitto](https://docs.cocogitto.io/) Configuration
 
+tag_prefix = "v"
 from_latest_tag = false
-ignore_merge_commits = false
+ignore_merge_commits = true
 branch_whitelist = [ "main", "release/**" ]
 pre_bump_hooks = [
     "cargo build --release",
-    "cargo doc",
     "echo 'bumping from {{latest}} to {{version}}'",
     "cargo bump {{version}}",
 ]
