@@ -63,5 +63,3 @@ USER 1000
 EXPOSE 8080 9090
 
 ENTRYPOINT ["/usr/local/bin/echo-rs"]
-
-CMD ["--port", "8080", "--metrics", "true", "--metrics-port", "9090", "--log-level", "info"]
