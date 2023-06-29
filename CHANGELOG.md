@@ -2,6 +2,14 @@
 All notable changes to this project will be documented in this file. See [conventional commits](https://www.conventionalcommits.org/) for commit guidelines.
 
 - - -
+## v0.2.0 - 2023-06-29
+#### Features
+- add tls support - (b962b52) - Mark S
+#### Miscellaneous Chores
+- **(version)** v0.1.1 - (aae94c4) - Mark S
+
+- - -
+
 ## v0.1.1 - 2023-06-11
 #### Style
 - **(logging)** improve logged output - (10366f4) - Mark S

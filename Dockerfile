@@ -7,7 +7,7 @@ WORKDIR WORKDIR /workspace
 
 RUN set -eux; apk add --no-cache bash musl-dev \
     && wget -O "/usr/bin/tini" \
-    "https://github.com/krallin/tini/releases/download/v0.19.0/tini-static-muslc-$(uname -m | sed 's#x86_64#amd64#g; s#aarch64#arm64#g')" \
+    "https://github.com/krallin/tini/releases/download/v0.19.0/tini-static-$(uname -m | sed 's#x86_64#amd64#g; s#aarch64#arm64#g')" \
     && chmod +x /usr/bin/tini
 
 
