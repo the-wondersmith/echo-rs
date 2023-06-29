@@ -4,7 +4,7 @@
 //! # `echo-rs` - a simple echo server
 
 // Standard Library Imports
-use std::{collections::HashMap, env, fmt::Debug, net::SocketAddr};
+use std::{collections::HashMap, env, fmt::Debug, net::SocketAddr, path::PathBuf};
 
 // Third Party Imports
 use axum::{
@@ -13,6 +13,7 @@ use axum::{
     http::{HeaderMap, Method},
     middleware, routing, Router,
 };
+use axum_server::tls_rustls::RustlsConfig;
 
 pub(crate) mod metrics;
 
@@ -26,19 +27,14 @@ struct Echo {
     body: serde_json::Value,
 }
 
-#[derive(Debug, clap::Parser)]
+#[derive(Clone, Debug, clap::Parser)]
 #[command(author, version, about)]
 struct Args {
-    #[arg(short = 'h', long = "host", env = "ECHO_HOST", default_value = "[::]")]
+    #[arg(long = "host", env = "ECHO_HOST", default_value = "[::]")]
     pub host: String,
-    #[arg(short = 'p', long = "port", env = "ECHO_PORT", default_value_t = 8080)]
+    #[arg(long = "port", env = "ECHO_PORT", default_value_t = 8080)]
     pub port: usize,
-    #[arg(
-        short = 'm',
-        long = "metrics",
-        env = "ECHO_METRICS",
-        default_value_t = true
-    )]
+    #[arg(long = "metrics", env = "ECHO_METRICS", default_value_t = true)]
     pub metrics: core::primitive::bool,
     #[arg(
         long = "metrics-port",
@@ -47,12 +43,21 @@ struct Args {
     )]
     pub metrics_port: usize,
     #[arg(
-        short = 'l',
         long = "log-level",
         env = "ECHO_LOG_LEVEL",
         default_value_t = tracing::Level::INFO,
     )]
     pub log_level: tracing::Level,
+    #[arg(long = "tls-key", env = "ECHO_TLS_KEY")]
+    pub tls_key: Option<PathBuf>,
+    #[arg(long = "tls-cert", env = "ECHO_TLS_CERT")]
+    pub tls_cert: Option<PathBuf>,
+    #[arg(
+        long = "metrics-use-tls",
+        env = "ECHO_METRICS_USE_TLS",
+        default_value_t = false
+    )]
+    pub metrics_use_tls: bool,
 }
 
 #[tracing::instrument(ret, skip_all, parent = None)]
@@ -134,32 +139,85 @@ async fn echo_router() -> anyhow::Result<Router> {
 }
 
 #[tracing::instrument(skip_all)]
-async fn serve_app(host: &str, port: usize) -> anyhow::Result<()> {
+async fn serve_app(
+    host: &str,
+    port: usize,
+    tls_key: Option<&PathBuf>,
+    tls_cert: Option<&PathBuf>,
+) -> anyhow::Result<()> {
     let app = echo_router().await?;
 
-    let addr: SocketAddr = format!("{host}:{port}").parse()?;
+    const LOG_LINE: &str = "`echo-rs` server listening at";
 
-    tracing::info!("`echo-rs` server listening at: http://{addr}");
+    let (mut proto, addr) = (
+        "http".to_string(),
+        format!("{host}:{port}").parse::<SocketAddr>()?,
+    );
 
-    axum::Server::bind(&addr)
-        .serve(app.into_make_service_with_connect_info::<SocketAddr>())
-        .await?;
+    match (tls_key, tls_cert) {
+        (Some(key), Some(cert)) => {
+            proto.push('s');
+
+            // configure certificate and private key used by https
+            let tls_config = RustlsConfig::from_pem_file(cert, key).await.unwrap();
+
+            tracing::info!("{LOG_LINE}: {proto}://{addr}");
+
+            axum_server::bind_rustls(addr, tls_config)
+                .serve(app.into_make_service_with_connect_info::<SocketAddr>())
+                .await
+                .unwrap();
+        }
+        _ => {
+            tracing::info!("{LOG_LINE}: {proto}://{addr}");
+
+            axum::Server::bind(&addr)
+                .serve(app.into_make_service_with_connect_info::<SocketAddr>())
+                .await?;
+        }
+    };
 
     Ok(())
 }
 
 #[tracing::instrument(skip_all)]
-async fn serve_metrics(host: &str, port: usize) -> anyhow::Result<()> {
+async fn serve_metrics(
+    host: &str,
+    port: usize,
+    tls_key: Option<&PathBuf>,
+    tls_cert: Option<&PathBuf>,
+) -> anyhow::Result<()> {
     let app = metrics::router();
 
-    let addr: SocketAddr = format!("{host}:{port}").parse()?;
+    const LOG_LINE: &str = "Serving Prometheus metrics at";
 
-    tracing::info!("Serving Prometheus metrics at: http://{addr}");
+    let (mut proto, addr) = (
+        "http".to_string(),
+        format!("{host}:{port}").parse::<SocketAddr>()?,
+    );
 
-    axum::Server::bind(&addr)
-        .serve(app.into_make_service())
-        .await
-        .unwrap();
+    match (tls_key, tls_cert) {
+        (Some(key), Some(cert)) => {
+            proto.push('s');
+
+            // configure certificate and private key used by https
+            let tls_config = RustlsConfig::from_pem_file(cert, key).await.unwrap();
+
+            tracing::info!("{LOG_LINE}: {proto}://{addr}");
+
+            axum_server::bind_rustls(addr, tls_config)
+                .serve(app.into_make_service_with_connect_info::<SocketAddr>())
+                .await
+                .unwrap();
+        }
+        _ => {
+            tracing::info!("{LOG_LINE}: {proto}://{addr}");
+
+            axum::Server::bind(&addr)
+                .serve(app.into_make_service_with_connect_info::<SocketAddr>())
+                .await?;
+        }
+    };
 
     Ok(())
 }
@@ -191,11 +249,31 @@ async fn main() -> anyhow::Result<()> {
     tracing::subscriber::set_global_default(subscriber).expect("setting default subscriber failed");
 
     if !args.metrics {
-        serve_app(&args.host, args.port).await
+        serve_app(
+            &args.host,
+            args.port,
+            args.tls_key.as_ref(),
+            args.tls_cert.as_ref(),
+        )
+        .await
     } else {
         let (echo_server, metrics_server) = tokio::join!(
-            serve_app(&args.host, args.port),
-            serve_metrics(&args.host, args.metrics_port)
+            serve_app(
+                &args.host,
+                args.port,
+                args.tls_key.as_ref(),
+                args.tls_cert.as_ref()
+            ),
+            if !args.metrics_use_tls {
+                serve_metrics(&args.host, args.metrics_port, None, None)
+            } else {
+                serve_metrics(
+                    &args.host,
+                    args.metrics_port,
+                    args.tls_key.as_ref(),
+                    args.tls_cert.as_ref(),
+                )
+            }
         );
         let (_, _) = (echo_server?, metrics_server?);
 
