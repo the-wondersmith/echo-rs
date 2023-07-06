@@ -2,6 +2,14 @@
 All notable changes to this project will be documented in this file. See [conventional commits](https://www.conventionalcommits.org/) for commit guidelines.
 
 - - -
+## v0.3.0 - 2023-07-06
+#### Features
+- add option to skip logging for user-specified url patterns - (dc0463c) - Mark S
+#### Miscellaneous Chores
+- **(version)** v0.2.0 - (e20a1fb) - Mark S
+
+- - -
+
 ## v0.2.0 - 2023-06-29
 #### Features
 - add tls support - (b962b52) - Mark S
