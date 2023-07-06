@@ -4,18 +4,22 @@
 //! # `echo-rs` - a simple echo server
 
 // Standard Library Imports
-use std::{collections::HashMap, env, fmt::Debug, net::SocketAddr, path::PathBuf};
+use std::{collections::HashMap, env, fmt::Debug, net::SocketAddr, path::PathBuf, sync::Arc};
 
 // Third Party Imports
 use axum::{
     body::Bytes,
-    extract::{ConnectInfo, Json, Path, Query},
+    extract::{ConnectInfo, Json, Path, Query, State},
     http::{HeaderMap, Method},
     middleware, routing, Router,
 };
 use axum_server::tls_rustls::RustlsConfig;
+use regex_lite::Regex;
 
 pub(crate) mod metrics;
+
+#[derive(Clone, Debug)]
+struct RegexParser;
 
 #[derive(Clone, Debug, serde::Serialize)]
 struct Echo {
@@ -58,10 +62,38 @@ struct Args {
         default_value_t = false
     )]
     pub metrics_use_tls: bool,
+    #[arg(
+        long = "skip-logging-for",
+        env = "ECHO_SKIP_LOGGING_FOR",
+        default_value = "",
+        long_help = "Comma or semi-colon separated list of URL patterns that should not be logged.\n\nExample:\n  echo-rs ... --skip-logging-for='some/endpoint; another/endpoint\\?with=some-param'"
+    )]
+    pub unlogged: String,
 }
 
-#[tracing::instrument(ret, skip_all, parent = None)]
+#[tracing::instrument(skip_all, parent = None)]
+/// Parse user-supplied patterns for URLs that should not be logged
+fn parse_unlogged_patterns(value: &str) -> Vec<Regex> {
+    let mut patterns: Vec<Regex> = Vec::new();
+
+    if !value.is_empty() {
+        patterns.extend(Regex::new("[,;] ?").unwrap().split(value).flat_map(
+            |pat| match Regex::new(pat) {
+                Ok(pattern) => Some(pattern),
+                Err(_) => {
+                    tracing::warn!("Declining to add bad filter pattern: {pat}");
+                    None
+                }
+            },
+        ));
+    }
+
+    patterns
+}
+
+#[tracing::instrument(skip_all, parent = None)]
 async fn serialize_request(
+    State(url_filters): State<Arc<Vec<Regex>>>,
     ConnectInfo(client): ConnectInfo<SocketAddr>,
     method: Method,
     path: Option<Path<String>>,
@@ -101,18 +133,27 @@ async fn serialize_request(
 
     let (client, method) = (client.to_string(), method.to_string());
 
-    Json(Echo {
+    let req = Echo {
         client,
         method,
         path,
         headers,
         params,
         body,
-    })
+    };
+
+    if !url_filters
+        .iter()
+        .any(|pattern| pattern.is_match(&req.path))
+    {
+        tracing::info!("{req:?}");
+    }
+
+    Json(req)
 }
 
 #[tracing::instrument]
-async fn echo_router() -> anyhow::Result<Router> {
+async fn echo_router(url_filters: Arc<Vec<Regex>>) -> anyhow::Result<Router> {
     Ok(Router::new()
         .route(
             "/",
@@ -124,6 +165,7 @@ async fn echo_router() -> anyhow::Result<Router> {
                 .trace(serialize_request)
                 .options(serialize_request),
         )
+        .with_state(url_filters.clone())
         .route(
             "/*key",
             routing::get(serialize_request)
@@ -134,7 +176,9 @@ async fn echo_router() -> anyhow::Result<Router> {
                 .trace(serialize_request)
                 .options(serialize_request),
         )
+        .with_state(url_filters.clone())
         .fallback(serialize_request)
+        .with_state(url_filters)
         .route_layer(middleware::from_fn(metrics::track_metrics)))
 }
 
@@ -144,8 +188,9 @@ async fn serve_app(
     port: usize,
     tls_key: Option<&PathBuf>,
     tls_cert: Option<&PathBuf>,
+    url_filters: Vec<Regex>,
 ) -> anyhow::Result<()> {
-    let app = echo_router().await?;
+    let app = echo_router(Arc::new(url_filters)).await?;
 
     const LOG_LINE: &str = "`echo-rs` server listening at";
 
@@ -248,12 +293,15 @@ async fn main() -> anyhow::Result<()> {
 
     tracing::subscriber::set_global_default(subscriber).expect("setting default subscriber failed");
 
+    let url_filters = parse_unlogged_patterns(&args.unlogged);
+
     if !args.metrics {
         serve_app(
             &args.host,
             args.port,
             args.tls_key.as_ref(),
             args.tls_cert.as_ref(),
+            url_filters,
         )
         .await
     } else {
@@ -262,7 +310,8 @@ async fn main() -> anyhow::Result<()> {
                 &args.host,
                 args.port,
                 args.tls_key.as_ref(),
-                args.tls_cert.as_ref()
+                args.tls_cert.as_ref(),
+                url_filters,
             ),
             if !args.metrics_use_tls {
                 serve_metrics(&args.host, args.metrics_port, None, None)
