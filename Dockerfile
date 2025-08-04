@@ -1,14 +1,11 @@
 ########################################
 #          Base Builder Image          #
 ########################################
-FROM docker.io/lukemathwalker/cargo-chef:latest-rust-alpine as chef-factory
+FROM docker.io/lukemathwalker/cargo-chef:latest-rust-alpine AS chef-factory
 
-WORKDIR WORKDIR /workspace
+WORKDIR /workspace
 
-RUN set -eux; apk add --no-cache bash musl-dev \
-    && wget -O "/usr/bin/tini" \
-    "https://github.com/krallin/tini/releases/download/v0.19.0/tini-static-$(uname -m | sed 's#x86_64#amd64#g; s#aarch64#arm64#g')" \
-    && chmod +x /usr/bin/tini
+RUN set -eux; apk add --no-cache bash musl-dev
 
 
 ########################################
@@ -49,20 +46,18 @@ RUN cargo build --release --bin echo-rs
 ########################################
 #              App Image               #
 ########################################
-FROM gcr.io/distroless/static-debian11:nonroot AS app-image
+FROM cgr.dev/chainguard/static:latest AS runtime
 
 # ^ we don't need the Rust toolchain to run the binary
 
-WORKDIR /
+LABEL org.opencontainers.image.source=https://github.com/the-wondersmith/echo-rs
 
-COPY --from=builder /usr/bin/tini /bin/tini
+WORKDIR /
 
 COPY --from=builder /workspace/target/release/echo-rs /bin/echo-rs
 
 USER 1000:1000
 
-EXPOSE 8080 9090
+EXPOSE 8000 9090
 
-ENTRYPOINT ["/bin/tini", "--"]
-
-CMD ["/bin/echo-rs"]
+ENTRYPOINT ["/bin/echo-rs"]

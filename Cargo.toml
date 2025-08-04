@@ -10,42 +10,21 @@ authors = ["Mark S. <the@wondersmith.dev>"]
 readme = "README.md"
 homepage = "https://github.com/the-wondersmith/echo-rs"
 repository = "https://github.com/the-wondersmith/echo-rs"
-# documentation = "https://docs.rs/echo-rs/latest/echo_rs/"
 
 keywords = ["kubernetes", "demo", "axum", "echo"]
 categories = ["web-programming::http-server", "development-tools::testing"]
 
-
-
-[profile.dev]
-debug = 2
-opt-level = 0
-incremental = true
-codegen-units = 512
-
-
-[profile.release]
-lto = true  # Enable Link Time Optimization to remove dead code reduce binary size
-debug = 0
-strip = true  # Automatically strip symbols from the binary.
-opt-level = "z"  # Optimize for size.
-panic = "abort"  # Don't include the rustc's unwinding code in release builds
-codegen-units = 1  # Allow for maximum size reduction optimizations
-incremental = true
-
-
 [dependencies]
-
-log = "^0.4"
-anyhow = "^1"
-tracing = "^0.1"
-metrics = "^0.21"
-serde_json = "^1"
-regex-lite = "^0.1"
-metrics-exporter-prometheus = "^0.12"
-serde = { version = "^1", features = ["derive"]}
-tokio = { version = "^1.25", features = ["full"] }
-axum-server = { version = "^0.5", features = ["tls-rustls"] }
-tracing-subscriber = { version = "^0.3", features = ["env-filter"] }
-clap = { version = "^4.3", features = ["env", "derive", "default"] }
-axum = { version = "^0.6", features = ["http2", "macros", "headers", "tracing"] }
+anyhow = "1"
+axum = { version = "0.8", features = ["http2", "macros", "tracing"] }
+axum-server = { version = "0.7", features = ["tls-rustls"] }
+clap = { version = "4.5", features = ["default", "derive", "env"] }
+metrics = "0.24"
+metrics-exporter-prometheus = "0.17"
+regex-lite = "0.1"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+tokio = { version = "1.25", features = ["full"] }
+tokio-util = { version = "0.7", default-features = false }
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }

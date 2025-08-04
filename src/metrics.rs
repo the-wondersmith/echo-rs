@@ -5,7 +5,10 @@ use std::{future::ready, time::Instant};
 
 // Third Party Imports
 use axum::{
-    extract::MatchedPath, http::Request, middleware::Next, response::IntoResponse, routing, Router,
+    extract::{MatchedPath, Request},
+    middleware::Next,
+    response::IntoResponse,
+    routing, Router,
 };
 use metrics_exporter_prometheus::{Matcher, PrometheusBuilder, PrometheusHandle};
 
@@ -36,13 +39,15 @@ pub(crate) fn setup_metrics_recorder() -> PrometheusHandle {
 
 #[tracing::instrument(skip_all)]
 #[allow(clippy::let_with_type_underscore)]
-pub(crate) async fn track_metrics<B>(req: Request<B>, next: Next<B>) -> impl IntoResponse {
+pub(crate) async fn track_metrics(req: Request, next: Next) -> impl IntoResponse {
     let start = Instant::now();
+
     let path = if let Some(matched_path) = req.extensions().get::<MatchedPath>() {
         matched_path.as_str().to_owned()
     } else {
         req.uri().path().to_owned()
     };
+
     let method = req.method().clone();
 
     let response = next.run(req).await;
@@ -56,8 +61,8 @@ pub(crate) async fn track_metrics<B>(req: Request<B>, next: Next<B>) -> impl Int
         ("status", status),
     ];
 
-    metrics::increment_counter!("http_requests_total", &labels);
-    metrics::histogram!("http_requests_duration_seconds", latency, &labels);
+    metrics::counter!("http_requests_total", &labels).increment(1);
+    metrics::histogram!("http_requests_duration_seconds", &labels).record(latency);
 
     response
 }

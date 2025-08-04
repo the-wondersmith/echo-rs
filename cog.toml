@@ -5,13 +5,13 @@ from_latest_tag = false
 ignore_merge_commits = true
 branch_whitelist = [ "main", "release/**" ]
 pre_bump_hooks = [
-    "cargo build --release",
-    "echo 'bumping from {{latest}} to {{version}}'",
-    "cargo bump {{version}}",
+  "cargo build --release",
+  "echo 'bumping from {{latest}} to {{version}}'",
+  "cargo bump {{version}}",
 ]
-post_bump_hooks = []
-pre_package_bump_hooks = []
-post_package_bump_hooks = []
+post_bump_hooks = [  ]
+pre_package_bump_hooks = [  ]
+post_package_bump_hooks = [  ]
 
 
 [commit_types]
@@ -23,7 +23,7 @@ wip = { changelog_title = "Work In Progress", omit_from_changelog = true }
 [changelog]
 
 path = "CHANGELOG.md"
-authors = []
+authors = [  ]
 
 
 [bump_profiles]
